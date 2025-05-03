@@ -2,9 +2,12 @@ package crazypants.enderio.conduit.liquid;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 import net.minecraftforge.common.util.ForgeDirection;
 import net.minecraftforge.fluids.FluidStack;
@@ -17,6 +20,8 @@ import crazypants.enderio.conduit.AbstractConduitNetwork;
 import crazypants.enderio.conduit.ConnectionMode;
 
 public class EnderLiquidConduitNetwork extends AbstractConduitNetwork<ILiquidConduit, AbstractEnderLiquidConduit> {
+
+    private Set<NetworkTankKey> processedTanks = new HashSet<>();
 
     private class TankIterator implements Iterator<NetworkTank> {
 
@@ -200,19 +205,42 @@ public class EnderLiquidConduitNetwork extends AbstractConduitNetwork<ILiquidCon
     }
 
     public FluidTankInfo[] getTankInfo(AbstractEnderLiquidConduit con, ForgeDirection conDir) {
-        List<FluidTankInfo> res = new ArrayList<FluidTankInfo>(tanks.size());
-        NetworkTank tank = getTank(con, conDir);
-        for (NetworkTank target : tanks) {
-            if (!target.equals(tank) && target.isValid()) {
-                FluidTankInfo[] tTanks = target.externalTank.getTankInfo(target.tankDir);
-                if (tTanks != null) {
-                    for (FluidTankInfo info : tTanks) {
-                        res.add(info);
+        // Создаем уникальный ключ для текущего танка
+        NetworkTankKey currentKey = new NetworkTankKey(con, conDir);
+
+        // Проверяем, не обрабатывали ли уже этот танк
+        if (processedTanks.contains(currentKey)) {
+            return new FluidTankInfo[0]; // Возвращаем пустой массив, если уже обработан
+        }
+
+        // Добавляем текущий танк в множество обработанных
+        processedTanks.add(currentKey);
+
+        try {
+            // Основная логика метода
+            List<FluidTankInfo> res = new ArrayList<>(tanks.size());
+            NetworkTank tank = getTank(con, conDir);
+
+            for (NetworkTank target : tanks) {
+                // Проверяем, что текущий танк не равен целевому и является валидным
+                if (!target.equals(tank) && target.isValid()) {
+                    // Получаем информацию о танке
+                    FluidTankInfo[] tTanks = target.externalTank.getTankInfo(target.tankDir);
+                    if (tTanks != null) {
+                        // Добавляем информацию о танке в результат
+                        for (FluidTankInfo info : tTanks) {
+                            res.add(info);
+                        }
                     }
                 }
             }
+
+            // Возвращаем результат в виде массива
+            return res.toArray(new FluidTankInfo[res.size()]);
+        } finally {
+            // Удаляем текущий танк из множества после обработки
+            processedTanks.remove(currentKey);
         }
-        return res.toArray(new FluidTankInfo[res.size()]);
     }
 
     static class NetworkTankKey {
@@ -231,36 +259,17 @@ public class EnderLiquidConduitNetwork extends AbstractConduitNetwork<ILiquidCon
 
         @Override
         public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + ((conDir == null) ? 0 : conDir.hashCode());
-            result = prime * result + ((conduitLoc == null) ? 0 : conduitLoc.hashCode());
+            int result = conDir != null ? conDir.hashCode() : 0;
+            result = 31 * result + (conduitLoc != null ? conduitLoc.hashCode() : 0);
             return result;
         }
 
         @Override
         public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            NetworkTankKey other = (NetworkTankKey) obj;
-            if (conDir != other.conDir) {
-                return false;
-            }
-            if (conduitLoc == null) {
-                if (other.conduitLoc != null) {
-                    return false;
-                }
-            } else if (!conduitLoc.equals(other.conduitLoc)) {
-                return false;
-            }
-            return true;
+            if (this == obj) return true;
+            if (obj == null || getClass() != obj.getClass()) return false;
+            NetworkTankKey that = (NetworkTankKey) obj;
+            return Objects.equals(conDir, that.conDir) && Objects.equals(conduitLoc, that.conduitLoc);
         }
     }
 
